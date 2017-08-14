@@ -1,0 +1,148 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Saurabh Bhalerao"
+date: "August 4, 2017"
+output:
+  html_document: default
+  word_document: default
+---
+#Prediction Assignment Writeup
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+In this project, we will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participant They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The five ways are exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Only Class A corresponds to correct performance. The goal of this project is to predict the manner in which they did the exercise, i.e., Class A to E. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data Processing
+
+### Import the Data
+
+First,Uploading R libraries.
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(lattice)
+library(ggplot2)
+library(rattle)
+library(randomForest)
+library(corrplot)
+```
+
+###Data Loading & Cleaning
+
+```{r}
+
+#set URL for Download
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+#download the data set
+training <- read.csv(url(trainUrl), na.strings = c("NA", ""))
+testing <- read.csv(url(testUrl), na.strings = c("NA", ""))
+
+#Partition training data into two data sets: Train (60%) & Test (40%)
+inTrain <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+myTraining <- training[inTrain, ]; myTesting <- training[-inTrain, ]
+dim(myTraining); dim(myTesting)
+
+```
+
+###Cleaning Data
+
+ 
+```{r}
+# Cleaning NearZeroVariance Variables
+nzv <- nearZeroVar(myTraining, saveMetrics=TRUE)
+myTraining <- myTraining[,nzv$nzv==FALSE]
+myTesting <- myTesting[,nzv$nzv==FALSE]
+dim(myTraining);dim(myTesting)
+
+# Remove the columns with more NA values
+AllNA    <- sapply(myTraining, function(x) mean(is.na(x))) > 0.95
+myTraining <- myTraining[, AllNA==FALSE]
+myTesting  <- myTesting[, AllNA==FALSE]
+dim(myTraining);dim(myTesting)
+
+# Remove first 5 columns 
+myTraining <- myTraining[, -(1:5)]
+myTesting  <- myTesting[, -(1:5)]
+dim(myTraining);dim(myTesting)
+
+```
+
+## Prediction Model
+
+Three methods will be applied to model the regressions (in the Train dataset) and the best one (with higher accuracy when applied to the Test dataset) will be used for the quiz predictions. The methods are: Random Forests, Decision Tree and Generalized Boosted Model, as described below.
+
+##1) Random Forest
+
+```{r }
+# model fit
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=myTraining, method="rf",trControl=controlRF)
+modFitRandForest$finalModel
+
+
+```
+
+###Prediction using above model & check of accuracy
+
+```{r}
+predictRandForest <- predict(modFitRandForest,myTesting)
+confMatRandForest <- confusionMatrix(predictRandForest, myTesting$classe)
+confMatRandForest
+```
+
+
+##2) Decision Trees
+
+```{r}
+# model fit
+set.seed(12345)
+modFitDecTree <- rpart(classe ~ ., data=myTraining, method="class")
+fancyRpartPlot(modFitDecTree)
+```
+
+
+###Prediction on test data and checking accuracy of model
+
+```{r}
+predictDecTree <- predict(modFitDecTree, newdata=myTesting, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, myTesting$classe)
+confMatDecTree
+```
+
+##3) Generalized Boosted Method
+
+```{r}
+# model fit
+set.seed(12345)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=myTraining, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+modFitGBM$finalModel
+```
+
+###Prediction on test data and checking accuracy of model
+
+```{r}
+predictGBM <- predict(modFitGBM, newdata=myTesting)
+confMatGBM <- confusionMatrix(predictGBM, myTesting$classe)
+confMatGBM
+```
+
+Conclusion :  Accuracy of Random Forest =0.9996
+              Accuracy of Decision Trees = 0.8083
+              Accuracy of Generalized Boosted Method = 0.9883
+              Random forest has given the best accuracy.
+              
+##Predicting on Testing set
+
+```{r}
+
+(predict(modFitRandForest, testing))
+```
+
